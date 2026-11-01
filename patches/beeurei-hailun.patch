@@ -1,0 +1,30 @@
+diff --git a/BeeUrEi/App/BeeUrEiApp.swift b/BeeUrEi/App/BeeUrEiApp.swift
+index 6a802952..c6150e2c 100644
+--- a/BeeUrEi/App/BeeUrEiApp.swift
++++ b/BeeUrEi/App/BeeUrEiApp.swift
+@@ -50,7 +50,8 @@ private struct RootView: View {
+                     accepted = true
+                 }
+             } else if !session.isLoggedIn {
+-                AuthGateView(session: session)
++                // 海伦之眼改动：去掉登录界面，未登录直接进入视障用户主界面（功能中枢）。
++                RoleHomeView(role: "blind", session: session) {}
+             } else if session.user == nil {
+                 // 有 token 但未恢复账号 → 拉 /api/me 恢复角色。
+                 if session.restoreFailed {
+diff --git a/BeeUrEi/Feedback/AudioSessionManager.swift b/BeeUrEi/Feedback/AudioSessionManager.swift
+index e2b28061..b8faa727 100644
+--- a/BeeUrEi/Feedback/AudioSessionManager.swift
++++ b/BeeUrEi/Feedback/AudioSessionManager.swift
+@@ -22,8 +22,9 @@ enum AudioSessionManager {
+     /// 可安全重复调用（中断监听只注册一次）。
+     static func configure() {
+         let session = AVAudioSession.sharedInstance()
+-        try? session.setCategory(.playback, mode: .voicePrompt,
+-                                 options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
++        // 海伦之眼改动：不再用 .playback 强制无视静音开关、压低其它声音；
++        // 改为 .ambient + 与其它音频混音，完全跟随系统音量与静音开关。
++        try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+         try? session.setActive(true)
+         if observer == nil {
+             observer = NotificationCenter.default.addObserver(

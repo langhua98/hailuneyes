@@ -7,12 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "BeeUrEi 的分支 / tag / commit"
+        description: "BeeUrEi 的分支 / tag / commit（补丁基于默认 commit 制作，换版本可能需要更新补丁）"
         required: false
-        default: "main"
+        default: "b73c5782b1dd3558bc3e8b57e96254bfe6395f10"
   push:
     paths:
       - ".github/workflows/build-beeurei-ipa.yml"
+      - "patches/**"
 
 permissions:
   contents: read
@@ -26,8 +27,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Hiko-Sphere/BeeUrEi
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event.inputs.ref || 'b73c5782b1dd3558bc3e8b57e96254bfe6395f10' }}
           path: BeeUrEi
+
+      - name: Checkout hailuneyes (patches)
+        uses: actions/checkout@v4
+        with:
+          path: hailuneyes
+
+      - name: Apply hailuneyes patches
+        working-directory: BeeUrEi
+        run: |
+          for p in ../hailuneyes/patches/*.patch; do
+            echo "Applying $p"
+            git apply --verbose "$p"
+          done
 
       - name: Select newest Xcode
         run: |
