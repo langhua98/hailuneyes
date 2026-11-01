@@ -1,0 +1,99 @@
+# 在 GitHub 的 macOS 机器上编译开源项目 BeeUrEi（https://github.com/Hiko-Sphere/BeeUrEi）
+# 产出一个【未签名】的 IPA，下载后用自己的 Apple ID 重新签名安装到 LiDAR iPhone 上试用。
+# 注意：BeeUrEi 采用 PolyForm Noncommercial 1.0.0 许可证，仅限非商业用途（个人体验/研究）。
+name: Build BeeUrEi IPA (unsigned)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "BeeUrEi 的分支 / tag / commit（补丁基于默认 commit 制作，换版本可能需要更新补丁）"
+        required: false
+        default: "b73c5782b1dd3558bc3e8b57e96254bfe6395f10"
+  push:
+    paths:
+      - ".github/workflows/build-beeurei-ipa.yml"
+      - "patches/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout BeeUrEi
+        uses: actions/checkout@v4
+        with:
+          repository: Hiko-Sphere/BeeUrEi
+          ref: ${{ github.event.inputs.ref || 'b73c5782b1dd3558bc3e8b57e96254bfe6395f10' }}
+          path: BeeUrEi
+
+      - name: Checkout hailuneyes (patches)
+        uses: actions/checkout@v4
+        with:
+          path: hailuneyes
+
+      - name: Apply hailuneyes patches
+        working-directory: BeeUrEi
+        run: |
+          for p in ../hailuneyes/patches/*.patch; do
+            echo "Applying $p"
+            git apply --verbose "$p"
+          done
+
+      - name: Select newest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Fetch WebRTC.xcframework
+        working-directory: BeeUrEi
+        run: bash scripts/fetch-webrtc.sh
+
+      - name: Generate Xcode project
+        working-directory: BeeUrEi
+        run: xcodegen generate
+
+      - name: Build for device (unsigned)
+        working-directory: BeeUrEi
+        run: |
+          set -o pipefail
+          xcodebuild -project BeeUrEi.xcodeproj -target BeeUrEi \
+            -sdk iphoneos -configuration Release \
+            ARCHS=arm64 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            SYMROOT="$PWD/build" \
+            build | tee build.log | grep -E "error:|warning: .*deprecated|BUILD (SUCCEEDED|FAILED)" || true
+          test -d build/Release-iphoneos/BeeUrEi.app
+
+      - name: Package IPA
+        working-directory: BeeUrEi
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          mkdir -p ../out/Payload
+          cp -R build/Release-iphoneos/BeeUrEi.app ../out/Payload/
+          cd ../out
+          zip -qry "BeeUrEi-unsigned-${SHA}.ipa" Payload
+          ls -lh *.ipa
+          echo "BeeUrEi commit: $(cd ../BeeUrEi && git rev-parse HEAD)" > build-info.txt
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: BeeUrEi-unsigned-ipa
+          path: |
+            out/*.ipa
+            out/build-info.txt
+          retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: BeeUrEi/build.log
