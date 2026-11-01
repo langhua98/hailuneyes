@@ -16,7 +16,7 @@ on:
       - "patches/**"
 
 permissions:
-  contents: read
+  contents: write   # 发布 Release（提供 IPA 直链）
 
 jobs:
   build:
@@ -90,6 +90,22 @@ jobs:
             out/*.ipa
             out/build-info.txt
           retention-days: 30
+
+      # 发布到固定 tag 的 Release，得到稳定的 IPA 直链：
+      # https://github.com/<owner>/<repo>/releases/latest/download/BeeUrEi-unsigned.ipa
+      - name: Publish IPA to Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cp out/*.ipa out/BeeUrEi-unsigned.ipa
+          TAG=beeurei-latest
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" out/BeeUrEi-unsigned.ipa out/build-info.txt \
+            --target "${{ github.sha }}" \
+            --title "BeeUrEi 未签名 IPA（海伦之眼补丁版）" \
+            --notes "自动编译自 Hiko-Sphere/BeeUrEi（PolyForm Noncommercial 1.0.0，仅限非商业用途），已打上 patches/ 下的补丁：去掉登录页、跟随系统音量与静音开关。未签名，需自行用 Apple ID 重签后安装。$(cat out/build-info.txt)" \
+            --latest
 
       - name: Upload build log on failure
         if: failure()
